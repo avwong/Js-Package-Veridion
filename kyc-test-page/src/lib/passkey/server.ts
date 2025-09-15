@@ -1,16 +1,18 @@
 export async function getContractId({ keyId }: { keyId: string }) {
   const mercuryUrl = process.env.NEXT_PUBLIC_MERCURY_URL;
   const mercuryJwt = process.env.NEXT_PUBLIC_MERCURY_JWT;
-  
+
   if (!mercuryUrl || !mercuryJwt) {
-    throw new Error("Mercury configuration missing. Please set NEXT_PUBLIC_MERCURY_URL and NEXT_PUBLIC_MERCURY_JWT");
+    throw new Error(
+      "Mercury configuration missing. Please set NEXT_PUBLIC_MERCURY_URL and NEXT_PUBLIC_MERCURY_JWT"
+    );
   }
 
   const res = await fetch(`${mercuryUrl}/zephyr/execute`, {
     method: "POST",
-    headers: { 
+    headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${mercuryJwt}`
+      Authorization: `Bearer ${mercuryJwt}`,
     },
     body: JSON.stringify({ op: "getContractId", keyId }),
   });
@@ -23,16 +25,18 @@ export async function getContractId({ keyId }: { keyId: string }) {
 export async function send(signedTx: string) {
   const mercuryUrl = process.env.NEXT_PUBLIC_MERCURY_URL;
   const mercuryJwt = process.env.NEXT_PUBLIC_MERCURY_JWT;
-  
+
   if (!mercuryUrl || !mercuryJwt) {
-    throw new Error("Mercury configuration missing. Please set NEXT_PUBLIC_MERCURY_URL and NEXT_PUBLIC_MERCURY_JWT");
+    throw new Error(
+      "Mercury configuration missing. Please set NEXT_PUBLIC_MERCURY_URL and NEXT_PUBLIC_MERCURY_JWT"
+    );
   }
 
   const res = await fetch(`${mercuryUrl}/zephyr/execute`, {
     method: "POST",
-    headers: { 
+    headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${mercuryJwt}`
+      Authorization: `Bearer ${mercuryJwt}`,
     },
     body: JSON.stringify({ op: "send", signedTx }),
   });
