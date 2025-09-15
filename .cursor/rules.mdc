@@ -1,0 +1,214 @@
+---
+alwaysApply: true
+---
+## 1) Scope (MUST)
+
+- Implement a framework-agnostic TS library (no React dependency).
+- Provide both **popup** and **iframe modal** open modes.
+- Unify results via **postMessage**:
+  - Messages: `EDGE_READY`, `EDGE_COMPLETE {token,status}`, `EDGE_CANCEL`, `EDGE_ERROR {error}`.
+- **Origin filtering**: only accept messages from `allowedOrigin` (default = `new URL(edgeUrl).origin`).
+- Token persistence in `localStorage` with safe try/catch.
+- **Insecure no-session mode** (for hackathon): when enabled, **do not** call any session/token endpoint—just open `/kyc`.
+
+---
+
+## 2) Non-Goals (MUST NOT)
+
+- No secret keys (`sk_...`) in the browser.
+- No server code, databases, or webhooks here.
+- No bundlers (Rollup/Webpack/Vite) for the lib build—**use `tsc` only**.
+- No external UI frameworks; use DOM APIs for modal/iframe.
+- No analytics/telemetry.
+
+---
+
+## 3) Public API (stable)
+
+```typescript
+export type KycStatus = 'unknown' | 'pending' | 'verified' | 'rejected';
+
+export type InitOptions = {
+  edgeUrl: string;          // e.g., https://edge.example.com
+  clientId: string;         // integrator/app id
+  storageKey?: string;      // default 'kyc_token'
+  allowedOrigin?: string;   // default origin(edgeUrl)
+  onStatusChange?: (s: KycStatus) => void;
+  // Future-friendly (scaffold only):
+  publishableKey?: string;
+  createSessionUrl?: string;
+  getClientToken?: () => Promise<{ session_id: string; client_secret: string }>;
+  // Hackathon mode: DO NOT pre-call anything; just open /kyc
+  insecureNoSession?: boolean; // default false
+};
+
+export type StartKycOptions = {
+  locale?: string;
+  theme?: 'light'|'dark'|'auto';
+  loginHint?: string;
+  openMode?: 'iframe'|'popup'; // default 'iframe'
+  insecure?: boolean;          // force no-session for this call
+};
+
+export type KycResult =
+ | { ok: true; status: KycStatus; token?: string }
+ | { ok: false; error: string };
+
+export type EdgeMessage =
+ | { type: 'EDGE_READY' }
+ | { type: 'EDGE_COMPLETE'; token: string; status: KycStatus }
+ | { type: 'EDGE_CANCEL' }
+ | { type: 'EDGE_ERROR'; error: string };
+```
+
+**Public functions:**
+- `init(options: InitOptions): void`
+- `startKyc(opts?: StartKycOptions): Promise<KycResult>`
+- `requireKyc(mode?: 'modal'|'reject', openMode?: 'popup'|'iframe'): Promise<boolean>`
+- `checkStatus(signal?: AbortSignal): Promise<KycStatus>`
+- `loginIfVerified(): Promise<boolean>`
+- `getToken(): string | null`
+- `logout(): void`
+
+**Backward-compat:** only additive changes to this API.
+
+---
+
+## 4) File Layout (MUST)
+
+```
+packages/kyc-client/
+  package.json        // "type":"module", "main":"dist/index.js", "types":"dist/index.d.ts"
+  tsconfig.json       // strict TS, ES2021 target, ES2020 module, DOM lib, declarations, outDir: dist
+  src/
+    index.ts          // exports default singleton + types
+    client.ts         // KycClient class (core logic)
+    core/types.ts     // public types only
+    core/storage.ts   // safe localStorage helpers
+    transport/edgeApi.ts // /status (and future session helpers, behind flags)
+    ui/overlay.ts     // modal + iframe creation/destruction
+    ui/popup.ts       // centered popup opener
+```
+
+---
+
+## 5) Implementation Rules (MUST)
+
+### `init()`
+- Derive `allowedOrigin` from `edgeUrl` if not provided.
+- Register one `window.addEventListener('message', handler, false)` and keep it for the lifetime of the page.
+- Store flags (`insecureNoSession`, etc).
+
+### `startKyc()`
+- Compute `openMode` (default 'iframe').
+- **Insecure flow** (if `insecureNoSession` or `opts.insecure`):
+  - Build `src = edgeUrl + '/kyc?client_id=' + encodeURIComponent(clientId) + '&insecure=1'`.
+  - Do not call any session/token endpoints.
+- **Future-safe stubs** (not used when insecure):
+  - If `getClientToken` exists, use it.
+  - Else if `createSessionUrl` exists, POST it.
+  - Else if `publishableKey` exists, POST edge `/v1/client_tokens`.
+  - Else (legacy) POST `${edgeUrl}/session`.
+  - Append `session_id` and optional `cs` to `src`.
+- **Open UI:**
+  - If popup: `window.open(...)`. If it returns null (blocked), fallback to iframe modal.
+  - If iframe: create overlay, mount iframe, allow camera/mic permissions via `allow` attribute.
+- Return a `Promise<KycResult>` resolved by postMessage handler.
+
+### `postMessage` handler
+- **Origin filter:** ignore if `evt.origin !== allowedOrigin` (unless `allowedOrigin` is explicitly `'*'`).
+- `EDGE_COMPLETE`: store token if present (safe try), call `onStatusChange(status)`, close UI, resolve `{ ok:true, status, token }`, clear resolver.
+- `EDGE_CANCEL` or `EDGE_ERROR`: close UI, resolve `{ ok:false, error }`, clear resolver.
+- Must always clean up overlay/popup references.
+
+### `checkStatus()`
+- If no token → return `'unknown'`.
+- Else POST `${edgeUrl}/status` with `Authorization: Bearer <token>` and `{ client_id }`.
+- If response ok → return provided status and call `onStatusChange(status)`; otherwise `'unknown'`.
+
+### `requireKyc()`
+- If `checkStatus()` is `'verified'` → `true`.
+- If mode `'reject'` → `false`.
+- Else open UI via `startKyc()` and return `res.ok && res.status === 'verified'`.
+
+### `logout()`
+- Remove token from localStorage; call `onStatusChange('unknown')`.
+
+---
+
+## 6) Security & UX (MUST)
+
+- Never trust arbitrary postMessages; always check origin.
+- localStorage usage must be wrapped in try/catch.
+- Popup must be opened on a user gesture; otherwise fallback to iframe.
+- Overlay must be accessible (focusable frame, backdrop click to close).
+- No secrets (`sk_...`) in the browser; if "publishable keys" (`pk_...`) appear later, they must only mint ephemeral tokens.
+
+---
+
+## 7) Dependencies & Build (MUST)
+
+- No runtime deps unless strictly necessary; prefer zero-dep.
+- **package.json:**
+  - `"type": "module"`
+  - `"main": "dist/index.js"`
+  - `"types": "dist/index.d.ts"`
+  - `"sideEffects": false`
+  - `"files": ["dist"]`
+  - `"scripts": { "build": "tsc -p tsconfig.json" }`
+- **tsconfig.json:** strict, target: "ES2021", module: "ES2020", lib: ["ES2021","DOM"], declaration: true, outDir: "dist".
+
+---
+
+## 8) Testing (light)
+
+Include a manual test plan in the README:
+- Init with `insecureNoSession: true`.
+- `startKyc('popup')` → complete → Promise resolves.
+- Repeat with `'iframe'`.
+- Popup blocked scenario → verify fallback to iframe.
+- With a token present, `checkStatus` hits `/status` if available.
+
+---
+
+## 9) Coding Standards
+
+- Explicit return types on all exported functions.
+- Avoid `any`; if unavoidable, isolate and document why.
+- Small, single-purpose modules; no God-objects.
+- JSDoc on all public types and methods.
+- Minimal logging; no console noise in production code (leave comments for hackathon where helpful).
+
+---
+
+## 10) When Asked for Changes
+
+- Provide precise diffs or full file contents for the touched files.
+- Do not reformat unrelated files.
+- Keep API backward compatible unless explicitly authorized to break it.
+
+---
+
+## 11) Example Usage (README snippet)
+
+```typescript
+import kyc from '@oppia/kyc-client';
+
+kyc.init({
+  edgeUrl: 'http://localhost:4000',
+  clientId: 'meridian-demo',
+  insecureNoSession: true, // hackathon: just open /kyc, no pre-call
+  onStatusChange: s => console.log('KYC status:', s),
+});
+
+const res = await kyc.startKyc({ openMode: 'popup' });
+// or: await kyc.startKyc({ openMode: 'iframe' });
+
+if (res.ok && res.status === 'verified') {
+  console.log('✅ Verified, token:', res.token);
+}
+```---
+description:
+globs:
+alwaysApply: true
+---
