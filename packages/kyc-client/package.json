@@ -1,0 +1,28 @@
+{
+  "name": "@oppia/kyc-client",
+  "version": "0.3.0",
+  "description": "Frontend-only KYC client library for Edge App integration",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "kyc",
+    "identity-verification",
+    "frontend",
+    "typescript"
+  ],
+  "author": "Oppia",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
