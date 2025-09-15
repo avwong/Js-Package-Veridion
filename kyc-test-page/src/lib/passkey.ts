@@ -49,10 +49,13 @@ export const account = new PasskeyKit({
   networkPassphrase,
   walletWasmHash,
 });
-export const server = {
-  getContractId: serverProxy.getContractId,
-  send: serverProxy.send,
-};
-
+export const server = new PasskeyServer({
+  rpcUrl,
+  launchtubeUrl,
+  launchtubeJwt,
+  mercuryProjectName,
+  mercuryUrl,
+  mercuryJwt,
+});
 export const sac = new SACClient({ rpcUrl, networkPassphrase });
 export const native = sac.getSACClient(nativeContractId);
