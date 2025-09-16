@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useWalletStore } from '@/store/walletStore';
 import { CheckCircle, XCircle, Clock, AlertCircle, KeyRound, Loader2, RefreshCw } from 'lucide-react';
+import { BackendAPI } from '@/lib/backend-api';
 
 interface VerificationStatus {
   wallet: string;
@@ -21,54 +22,45 @@ export default function CheckVerifiedPage() {
   const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Mock verification data - in a real app, this would come from your backend
-  const mockVerificationData: VerificationStatus[] = [
-    {
-      wallet: 'GABC123456789012345678901234567890123456789012345678901234567890',
-      name: 'John',
-      surnames: 'Doe',
-      status: 'APPROVED',
-      verifiedAt: '2024-01-15T10:30:00Z'
-    },
-    {
-      wallet: 'GDEF123456789012345678901234567890123456789012345678901234567890',
-      name: 'Jane',
-      surnames: 'Smith',
-      status: 'PENDING',
-      submittedAt: '2024-01-16T14:20:00Z'
-    },
-    {
-      wallet: 'GGHI123456789012345678901234567890123456789012345678901234567890',
-      name: 'Bob',
-      surnames: 'Johnson',
-      status: 'REJECTED',
-      rejectedAt: '2024-01-14T09:15:00Z',
-      reason: 'Document quality insufficient'
-    }
-  ];
 
   useEffect(() => {
     if (contractId) {
-      // Simulate checking verification status
+      // Check verification status from backend API
       setLoading(true);
-      setTimeout(() => {
-        // Find user in mock data
-        const userStatus = mockVerificationData.find(
-          user => user.wallet === contractId
-        );
-        
-        if (userStatus) {
-          setVerificationStatus(userStatus);
-        } else {
+      BackendAPI.getStatus(contractId)
+        .then(response => {
+          if (response.success && response.data) {
+            setVerificationStatus({
+              wallet: response.data.wallet,
+              name: response.data.name || 'Unknown',
+              surnames: response.data.surnames || 'User',
+              status: response.data.status,
+              verifiedAt: response.data.verifiedAt,
+              submittedAt: response.data.submittedAt,
+              rejectedAt: response.data.rejectedAt,
+              reason: response.data.reason
+            });
+          } else {
+            setVerificationStatus({
+              wallet: contractId,
+              name: 'Unknown',
+              surnames: 'User',
+              status: 'NOT_FOUND'
+            });
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching KYC status:', error);
           setVerificationStatus({
             wallet: contractId,
             name: 'Unknown',
             surnames: 'User',
             status: 'NOT_FOUND'
           });
-        }
-        setLoading(false);
-      }, 1000);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
     }
   }, [contractId]);
 
@@ -130,17 +122,23 @@ export default function CheckVerifiedPage() {
     setVerificationStatus(null);
   };
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     if (contractId) {
       setLoading(true);
-      setTimeout(() => {
-        // Find user in mock data
-        const userStatus = mockVerificationData.find(
-          user => user.wallet === contractId
-        );
+      try {
+        const response = await BackendAPI.getStatus(contractId);
         
-        if (userStatus) {
-          setVerificationStatus(userStatus);
+        if (response.success && response.data) {
+          setVerificationStatus({
+            wallet: response.data.wallet,
+            name: response.data.name || 'Unknown',
+            surnames: response.data.surnames || 'User',
+            status: response.data.status,
+            verifiedAt: response.data.verifiedAt,
+            submittedAt: response.data.submittedAt,
+            rejectedAt: response.data.rejectedAt,
+            reason: response.data.reason
+          });
         } else {
           setVerificationStatus({
             wallet: contractId,
@@ -149,8 +147,17 @@ export default function CheckVerifiedPage() {
             status: 'NOT_FOUND'
           });
         }
+      } catch (error) {
+        console.error('Error fetching KYC status:', error);
+        setVerificationStatus({
+          wallet: contractId,
+          name: 'Unknown',
+          surnames: 'User',
+          status: 'NOT_FOUND'
+        });
+      } finally {
         setLoading(false);
-      }, 1000);
+      }
     }
   };
 

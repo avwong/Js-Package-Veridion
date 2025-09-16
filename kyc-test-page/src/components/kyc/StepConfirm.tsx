@@ -13,7 +13,7 @@ interface VerificationResult {
 }
 
 export function StepConfirm({ onClose }: { onClose: () => void }) {
-  const { registerWithBackend, registrationStatus } = useWalletStore();
+  const { registerWithBackend, registrationStatus, contractId } = useWalletStore();
   const [isRegistering, setIsRegistering] = useState(false);
 
   useEffect(() => {
@@ -54,8 +54,15 @@ export function StepConfirm({ onClose }: { onClose: () => void }) {
       }
     });
 
+    // Include wallet information in vendorData so it's available in webhook
+    const vendorData = contractId ? JSON.stringify({ 
+      wallet: contractId,
+      contractId: contractId,
+      timestamp: new Date().toISOString()
+    }) : '';
+    
     veriff.setParams({
-      vendorData: ' '
+      vendorData: vendorData
     });
 
     veriff.mount({

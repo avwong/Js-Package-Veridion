@@ -54,7 +54,28 @@ export const useWalletStore = create<WalletStore>()(
           });
 
           set({ keyId: base64url(kid), contractId: cid, isLoading: false });
-          toast.success("Wallet connected successfully!");
+          
+          // Check KYC status after successful login
+          try {
+            const kycStatus = await BackendAPI.getStatus(cid);
+            if (kycStatus.success && kycStatus.data) {
+              const status = kycStatus.data.status;
+              if (status === 'APPROVED') {
+                toast.success("Wallet connected! KYC verified ✅");
+              } else if (status === 'REJECTED') {
+                toast.warning("Wallet connected! KYC rejected ❌");
+              } else if (status === 'PENDING') {
+                toast.info("Wallet connected! KYC pending ⏳");
+              } else {
+                toast.success("Wallet connected successfully!");
+              }
+            } else {
+              toast.success("Wallet connected successfully!");
+            }
+          } catch (kycError) {
+            console.warn('Could not check KYC status:', kycError);
+            toast.success("Wallet connected successfully!");
+          }
         } catch (err: any) {
           // Optional fallback: if Mercury cannot find contract for key, register a new one
           const errorMessage =
@@ -72,7 +93,28 @@ export const useWalletStore = create<WalletStore>()(
               } = await account.createWallet("App", "Passkey User");
               await server.send(signedTx.toXDR());
               set({ keyId: base64url(kid), contractId: cid, isLoading: false });
-              toast.success("Wallet registered successfully!");
+              
+              // Check KYC status after successful registration
+              try {
+                const kycStatus = await BackendAPI.getStatus(cid);
+                if (kycStatus.success && kycStatus.data) {
+                  const status = kycStatus.data.status;
+                  if (status === 'APPROVED') {
+                    toast.success("Wallet registered! KYC verified ✅");
+                  } else if (status === 'REJECTED') {
+                    toast.warning("Wallet registered! KYC rejected ❌");
+                  } else if (status === 'PENDING') {
+                    toast.info("Wallet registered! KYC pending ⏳");
+                  } else {
+                    toast.success("Wallet registered successfully!");
+                  }
+                } else {
+                  toast.success("Wallet registered successfully!");
+                }
+              } catch (kycError) {
+                console.warn('Could not check KYC status:', kycError);
+                toast.success("Wallet registered successfully!");
+              }
               return;
             } catch (e2: any) {
               set({

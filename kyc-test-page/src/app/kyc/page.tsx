@@ -8,6 +8,7 @@ import {
 } from "@/components/kyc/DynamicStepper";
 import { StepLogin } from "@/components/kyc/StepLogin";
 import { StepConfirm } from "@/components/kyc/StepConfirm";
+import { BackendAPI } from "@/lib/backend-api";
 
 export default function KycPasskeyPage() {
   const [log, setLog] = useState<string[]>([]);
@@ -51,6 +52,38 @@ export default function KycPasskeyPage() {
       await login();
       setLoading(false);
       addLog("Login successful");
+      
+      // Check KYC status after login
+      const { contractId } = useWalletStore.getState();
+      if (contractId) {
+        try {
+          addLog("Checking KYC status...");
+          const kycStatus = await BackendAPI.getStatus(contractId);
+          if (kycStatus.success && kycStatus.data) {
+            const status = kycStatus.data.status;
+            if (status === 'APPROVED') {
+              addLog("KYC already verified - redirecting to home");
+              postToHost({ type: "EDGE_COMPLETE", token: `pk_${contractId}`, status: "verified" });
+              if (window.opener) setTimeout(() => window.close(), 300);
+              return;
+            } else if (status === 'REJECTED') {
+              addLog("KYC rejected - user can retry");
+              setCurrentStep(1);
+              finishIfReady(false);
+              return;
+            } else if (status === 'PENDING') {
+              addLog("KYC pending - user can check status");
+              setCurrentStep(1);
+              finishIfReady(false);
+              return;
+            }
+          }
+        } catch (kycError) {
+          console.warn('Could not check KYC status:', kycError);
+          addLog("Could not check KYC status - proceeding with flow");
+        }
+      }
+      
       setCurrentStep(1);
       finishIfReady(false);
     } catch (e: any) {

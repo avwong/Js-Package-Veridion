@@ -35,9 +35,24 @@ export interface SubmitSignedTransactionResponse {
   rebuiltXdr?: string;
 }
 
+export interface GetStatusResponse {
+  success: boolean;
+  data?: {
+    wallet: string;
+    name?: string;
+    surnames?: string;
+    status: 'APPROVED' | 'REJECTED' | 'PENDING' | 'NOT_FOUND';
+    verifiedAt?: string;
+    submittedAt?: string;
+    rejectedAt?: string;
+    reason?: string;
+  };
+  error?: string;
+}
+
 const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL;
 
-export class BackendAPI {
+export class BackendAPI {   
   static async buildRegisterTransaction(data: BuildRegisterTransactionDto): Promise<BuildRegisterTransactionResponse> {
     const response = await fetch(`${BACKEND_BASE_URL}/admin/register/build`, {
       method: 'POST',
@@ -61,6 +76,21 @@ export class BackendAPI {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  static async getStatus(wallet: string): Promise<GetStatusResponse> {
+    const response = await fetch(`${BACKEND_BASE_URL}/admin/get-status/${wallet}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
 
     if (!response.ok) {
