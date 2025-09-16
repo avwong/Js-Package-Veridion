@@ -203,7 +203,8 @@ export class KycClient {
                     // Grace period to allow EDGE_* message to arrive after window closes
                     const currentSession = this.activeSession;
                     setTimeout(() => {
-                        if (this.activeSession === currentSession && !this.activeSession.settled) {
+                        if (this.activeSession === currentSession &&
+                            !this.activeSession.settled) {
                             const resolver = this.activeSession.resolve;
                             this.activeSession.settled = true;
                             this.cleanupSession();
