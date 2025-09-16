@@ -13,7 +13,7 @@ export default function KycPasskeyPage() {
   const [log, setLog] = useState<string[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [mounted, setMounted] = useState(false);
-  const { login, register, isLoading, setLoading, setError } = useWalletStore();
+  const { login, register, createPasskeyOnly, isLoading, setLoading, setError } = useWalletStore();
 
   const addLog = (m: string) => setLog((l) => [...l.slice(-9), m]);
 
@@ -64,19 +64,19 @@ export default function KycPasskeyPage() {
   const handleRegister = async () => {
     try {
       setLoading(true);
-      addLog("Registering wallet with passkey...");
-      await register("KYC Wallet");
+      addLog("Creating passkey...");
+      await createPasskeyOnly("KYC User");
       setLoading(false);
-      addLog("Registration successful");
+      addLog("Passkey created successfully");
       setCurrentStep(1);
       finishIfReady(false);
     } catch (e: any) {
       setLoading(false);
-      setError(e?.message ?? "Registration failed");
-      addLog(`Registration error: ${e?.message ?? e}`);
+      setError(e?.message ?? "Passkey creation failed");
+      addLog(`Passkey creation error: ${e?.message ?? e}`);
       postToHost({
         type: "EDGE_ERROR",
-        error: e?.message ?? "Registration error",
+        error: e?.message ?? "Passkey creation error",
       });
     }
   };

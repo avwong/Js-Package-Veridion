@@ -64,6 +64,7 @@ export function StepLogin({
             </div>
           </div>
 
+            {/* REGISTER Form is not being used */}
           <Button
             onClick={onRegister}
             disabled={isLoading}
@@ -74,7 +75,7 @@ export function StepLogin({
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Creating wallet...
+                Creating passkey...
               </>
             ) : (
               <>
