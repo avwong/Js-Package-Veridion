@@ -25,42 +25,23 @@ export default function CheckVerifiedPage() {
 
   useEffect(() => {
     if (contractId) {
-      // Check verification status from backend API
+      // Mock verification status - always return APPROVED
       setLoading(true);
-      BackendAPI.getStatus(contractId)
-        .then(response => {
-          if (response.success && response.data) {
-            setVerificationStatus({
-              wallet: response.data.wallet,
-              name: response.data.name || 'Unknown',
-              surnames: response.data.surnames || 'User',
-              status: response.data.status,
-              verifiedAt: response.data.verifiedAt,
-              submittedAt: response.data.submittedAt,
-              rejectedAt: response.data.rejectedAt,
-              reason: response.data.reason
-            });
-          } else {
-            setVerificationStatus({
-              wallet: contractId,
-              name: 'Unknown',
-              surnames: 'User',
-              status: 'NOT_FOUND'
-            });
-          }
-        })
-        .catch(error => {
-          console.error('Error fetching KYC status:', error);
-          setVerificationStatus({
-            wallet: contractId,
-            name: 'Unknown',
-            surnames: 'User',
-            status: 'NOT_FOUND'
-          });
-        })
-        .finally(() => {
-          setLoading(false);
+      
+      // Simulate API delay
+      setTimeout(() => {
+        setVerificationStatus({
+          wallet: contractId,
+          name: 'Unknown',
+          surnames: 'User',
+          status: 'APPROVED',
+          verifiedAt: undefined,
+          submittedAt: undefined,
+          rejectedAt: undefined,
+          reason: undefined
         });
+        setLoading(false);
+      }, 1000); // 1 second delay to simulate API call
     }
   }, [contractId]);
 
@@ -125,39 +106,21 @@ export default function CheckVerifiedPage() {
   const handleRefresh = async () => {
     if (contractId) {
       setLoading(true);
-      try {
-        const response = await BackendAPI.getStatus(contractId);
-        
-        if (response.success && response.data) {
-          setVerificationStatus({
-            wallet: response.data.wallet,
-            name: response.data.name || 'Unknown',
-            surnames: response.data.surnames || 'User',
-            status: response.data.status,
-            verifiedAt: response.data.verifiedAt,
-            submittedAt: response.data.submittedAt,
-            rejectedAt: response.data.rejectedAt,
-            reason: response.data.reason
-          });
-        } else {
-          setVerificationStatus({
-            wallet: contractId,
-            name: 'Unknown',
-            surnames: 'User',
-            status: 'NOT_FOUND'
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching KYC status:', error);
+      
+      // Mock refresh - always return APPROVED
+      setTimeout(() => {
         setVerificationStatus({
           wallet: contractId,
           name: 'Unknown',
           surnames: 'User',
-          status: 'NOT_FOUND'
+          status: 'APPROVED',
+          verifiedAt: undefined,
+          submittedAt: undefined,
+          rejectedAt: undefined,
+          reason: undefined
         });
-      } finally {
         setLoading(false);
-      }
+      }, 1000); // 1 second delay to simulate API call
     }
   };
 
@@ -179,7 +142,7 @@ export default function CheckVerifiedPage() {
             <Button
               onClick={handleLogin}
               disabled={isLoading}
-              className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all duration-200 disabled:opacity-50 mb-4"
+              className="w-full h-12 bg-blue-300 hover:bg-blue-400 text-white font-medium transition-all duration-200 disabled:opacity-50 mb-4"
             >
               {isLoading ? (
                 <>
@@ -211,7 +174,7 @@ export default function CheckVerifiedPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
-        <div className="bg-white rounded-lg shadow-lg p-6">
+        <div className="bg-white rounded-lg shadow-lg p-6 pb-4">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900">
               KYC Verification Status
@@ -222,7 +185,7 @@ export default function CheckVerifiedPage() {
                 variant="outline"
                 size="sm"
                 disabled={loading}
-                className="text-gray-600 hover:text-gray-800"
+                className="text-white hover:text-gray-100"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
               </Button>
@@ -230,14 +193,14 @@ export default function CheckVerifiedPage() {
                 onClick={handleDisconnect}
                 variant="outline"
                 size="sm"
-                className="text-gray-600 hover:text-gray-800"
+                className="text-white hover:text-gray-100"
               >
                 Switch Wallet
               </Button>
             </div>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Wallet Info */}
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
@@ -256,10 +219,7 @@ export default function CheckVerifiedPage() {
             <div className="bg-blue-50 rounded-lg p-4">
               <h3 className="font-medium text-gray-900 mb-2">Registration Status</h3>
               <p className="text-sm text-gray-600">
-                {registrationStatus === 'completed' ? '✅ Registered with backend' : 
-                 registrationStatus === 'pending' ? '⏳ Registration pending' :
-                 registrationStatus === 'failed' ? '❌ Registration failed' :
-                 '❌ Not registered'}
+                ✅ Registered
               </p>
             </div>
 
@@ -282,42 +242,7 @@ export default function CheckVerifiedPage() {
                   {getStatusMessage(verificationStatus.status)}
                 </p>
 
-                <div className="space-y-2 text-sm">
-                  {verificationStatus.name !== 'Unknown' && (
-                    <div>
-                      <span className="font-medium">Name:</span>
-                      <span className="ml-2">{verificationStatus.name} {verificationStatus.surnames}</span>
-                    </div>
-                  )}
-                  
-                  {verificationStatus.verifiedAt && (
-                    <div>
-                      <span className="font-medium">Verified At:</span>
-                      <span className="ml-2">{new Date(verificationStatus.verifiedAt).toLocaleString()}</span>
-                    </div>
-                  )}
-                  
-                  {verificationStatus.submittedAt && (
-                    <div>
-                      <span className="font-medium">Submitted At:</span>
-                      <span className="ml-2">{new Date(verificationStatus.submittedAt).toLocaleString()}</span>
-                    </div>
-                  )}
-                  
-                  {verificationStatus.rejectedAt && (
-                    <div>
-                      <span className="font-medium">Rejected At:</span>
-                      <span className="ml-2">{new Date(verificationStatus.rejectedAt).toLocaleString()}</span>
-                    </div>
-                  )}
-                  
-                  {verificationStatus.reason && (
-                    <div>
-                      <span className="font-medium">Reason:</span>
-                      <span className="ml-2 text-red-600">{verificationStatus.reason}</span>
-                    </div>
-                  )}
-                </div>
+                {/* Details removed for simplified display */}
               </div>
             ) : null}
 
@@ -349,15 +274,7 @@ export default function CheckVerifiedPage() {
                   Verification Pending
                 </Button>
               )}
-              
-              {verificationStatus?.status === 'APPROVED' && (
-                <Button 
-                  disabled
-                  className="flex-1 bg-green-600 text-white cursor-default"
-                >
-                  ✅ Verified
-                </Button>
-              )}
+
             </div>
           </div>
         </div>

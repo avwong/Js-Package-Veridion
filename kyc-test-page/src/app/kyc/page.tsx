@@ -20,6 +20,9 @@ export default function KycPasskeyPage() {
 
   const postToHost = (message: any) => {
     try {
+      // Only run on client side
+      if (typeof window === 'undefined') return;
+      
       const target = "*" as const;
       if (window.opener) {
         window.opener.postMessage(message, target);
@@ -41,7 +44,9 @@ export default function KycPasskeyPage() {
       if (advance) setCurrentStep(1);
       const token = `pk_${latest.contractId}`;
       postToHost({ type: "EDGE_COMPLETE", token, status: "verified" });
-      if (window.opener) setTimeout(() => window.close(), 300);
+      if (typeof window !== 'undefined' && window.opener) {
+        setTimeout(() => window.close(), 300);
+      }
     }
   };
 
@@ -64,7 +69,9 @@ export default function KycPasskeyPage() {
             if (status === 'APPROVED') {
               addLog("KYC already verified - redirecting to home");
               postToHost({ type: "EDGE_COMPLETE", token: `pk_${contractId}`, status: "verified" });
-              if (window.opener) setTimeout(() => window.close(), 300);
+              if (typeof window !== 'undefined' && window.opener) {
+                setTimeout(() => window.close(), 300);
+              }
               return;
             } else if (status === 'REJECTED') {
               addLog("KYC rejected - user can retry");
@@ -116,7 +123,9 @@ export default function KycPasskeyPage() {
 
   const cancel = () => {
     postToHost({ type: "EDGE_CANCEL" });
-    if (window.opener) setTimeout(() => window.close(), 300);
+    if (typeof window !== 'undefined' && window.opener) {
+      setTimeout(() => window.close(), 300);
+    }
   };
 
   const steps: StepperStep[] = [
@@ -152,15 +161,17 @@ export default function KycPasskeyPage() {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">KYC + Passkey</h1>
-          <p className="text-sm text-gray-600">
-            Step 1: Login or Register with Passkey. Step 2: KYC completes and
-            returns to host.
-          </p>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+
+      <div className="flex items-center justify-center">
+        <div className="w-full max-w-3xl">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-gray-900">KYC + Passkey</h1>
+            <p className="text-sm text-gray-600">
+              Step 1: Login or Register with Passkey. Step 2: KYC completes and
+              returns to host.
+            </p>
+          </div>
 
         {mounted && (
           <div className="rounded-lg border bg-white p-4 shadow-sm">
@@ -182,6 +193,7 @@ export default function KycPasskeyPage() {
               <div key={i}>{l}</div>
             ))}
           </div>
+        </div>
         </div>
       </div>
     </div>

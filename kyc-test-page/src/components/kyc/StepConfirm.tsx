@@ -17,63 +17,79 @@ export function StepConfirm({ onClose }: { onClose: () => void }) {
   const [isRegistering, setIsRegistering] = useState(false);
 
   useEffect(() => {
-    const veriff = Veriff({
-      apiKey: process.env.NEXT_PUBLIC_VERIFF_API_KEY!,
-      parentId: 'veriff-root',
-      onSession: async function(err: any, response: any) {
-        if (err) {
-          console.error('Veriff session error:', err);
-          return;
-        }
-        
-        // received the response, verification can be started / triggered now
-        console.log('Veriff session created:', response);
-        
-        // Register user with backend AFTER verification session is created
-        // This prevents double registration for first-time users
-        if (registrationStatus === null) {
-          setIsRegistering(true);
-          try {
-            // Extract name from the form data if available
-            const formData = response.formData || {};
-            const firstName = formData.givenName || 'User';
-            const lastName = formData.lastName || 'Name';
-            
-            await registerWithBackend(firstName, lastName);
-            console.log('User registered with backend after verification session created');
-          } catch (error) {
-            console.error('Failed to register user with backend:', error);
-            // Continue with verification even if registration fails
-          } finally {
-            setIsRegistering(false);
-          }
-        }
-        
-        // redirect to verification URL
-        window.location.href = response.verification.url;
-      }
-    });
-
-    // Include wallet information in vendorData so it's available in webhook
-    const vendorData = contractId ? JSON.stringify({ 
-      wallet: contractId,
-      contractId: contractId,
-      timestamp: new Date().toISOString()
-    }) : '';
+    // Only run on client side
+    if (typeof window === 'undefined') return;
     
-    veriff.setParams({
-      vendorData: vendorData
-    });
+    // Wait for DOM to be ready
+    const initVeriff = () => {
+      const veriffRoot = document.getElementById('veriff-root');
+      if (!veriffRoot) {
+        console.error('veriff-root element not found');
+        return;
+      }
 
-    veriff.mount({
-      formLabel: {
-        givenName: 'First name',
-        lastName: 'Last name'
-      },
-      submitBtnText: 'Start Verification'
+      const veriff = Veriff({
+        apiKey: process.env.NEXT_PUBLIC_VERIFF_API_KEY!,
+        parentId: 'veriff-root',
+        onSession: async function(err: any, response: any) {
+          if (err) {
+            console.error('Veriff session error:', err);
+            return;
+          }
+          
+          // received the response, verification can be started / triggered now
+          console.log('Veriff session created:', response);
+          
+          // Register user with backend AFTER verification session is created
+          // This prevents double registration for first-time users
+          if (registrationStatus === null) {
+            setIsRegistering(true);
+            try {
+              // Extract name from the form data if available
+              const formData = response.formData || {};
+              const firstName = formData.givenName || 'User';
+              const lastName = formData.lastName || 'Name';
+              
+              await registerWithBackend(firstName, lastName);
+              console.log('User registered with backend after verification session created');
+            } catch (error) {
+              console.error('Failed to register user with backend:', error);
+              // Continue with verification even if registration fails
+            } finally {
+              setIsRegistering(false);
+            }
+          }
+          
+          // redirect to verification URL
+          window.location.href = response.verification.url;
+        }
+      });
 
-    });
-  }, []);
+      // Include wallet information in vendorData so it's available in webhook
+      const vendorData = contractId ? JSON.stringify({ 
+        wallet: contractId,
+        contractId: contractId,
+        timestamp: new Date().toISOString()
+      }) : '';
+      
+      veriff.setParams({
+        vendorData: vendorData
+      });
+
+      veriff.mount({
+        formLabel: {
+          givenName: 'First name',
+          lastName: 'Last name'
+        },
+        submitBtnText: 'Start Verification'
+      });
+    };
+
+    // Use setTimeout to ensure DOM is ready
+    const timer = setTimeout(initVeriff, 100);
+    
+    return () => clearTimeout(timer);
+  }, [contractId, registrationStatus, registerWithBackend]);
   return (
     <div className='flex flex-col items-center justify-center min-h-[300px]'>
       <style jsx>{`
@@ -86,14 +102,7 @@ export function StepConfirm({ onClose }: { onClose: () => void }) {
           border-color: #2a2a2a !important;
         }
       `}</style>
-      {isRegistering ? (
-        <div className='text-center space-y-4'>
-          <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto'></div>
-          <p className='text-sm text-gray-600'>Registering user with backend...</p>
-        </div>
-      ) : (
-        <div id='veriff-root' className='w-full max-w-md'></div>
-      )}
+      <div id="veriff-root" className="w-full max-w-md"></div>
     </div>
   );
 }

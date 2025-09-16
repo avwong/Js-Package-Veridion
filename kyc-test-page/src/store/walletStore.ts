@@ -283,7 +283,7 @@ export const useWalletStore = create<WalletStore>()(
             error: err instanceof Error ? err.message : "Backend registration failed",
             registrationStatus: 'failed'
           });
-          toast.error("Backend registration failed");
+          // toast.error("Backend registration failed");
           throw err;
         }
       },
