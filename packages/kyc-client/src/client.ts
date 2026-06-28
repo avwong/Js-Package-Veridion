@@ -7,6 +7,7 @@ import type {
   EdgeMessage,
 } from "./core/types.js";
 import { createTokenStorage } from "./core/storage.js";
+import { parseTokenExpiry } from "./core/jwt.js";
 import { checkKycStatus, EdgeApiError } from "./transport/edgeApi.js";
 import {
   openKycPopup,
@@ -25,6 +26,7 @@ export class KycClient {
   private allowedOrigin = "";
   private storageKey = "kyc_token";
   private onStatusChange: ((status: KycStatus) => void) | undefined = undefined;
+  private onTokenExpired: (() => void) | undefined = undefined;
   private insecureNoSession = false;
 
   // Future options (not used in insecure mode)
@@ -38,18 +40,23 @@ export class KycClient {
   private activeSession: KycSession | null = null;
   private messageHandler: ((event: MessageEvent) => void) | undefined =
     undefined;
+  private expiryTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 
   /**
    * Initialize the KYC client
    * @param options Configuration options
    */
   init(options: InitOptions): void {
+    // Clear any expiry timer left from a previous init
+    this.clearExpiryTimer();
+
     this.edgeUrl = options.edgeUrl;
     this.clientId = options.clientId;
     this.storageKey = options.storageKey || "kyc_token";
     this.allowedOrigin =
       options.allowedOrigin || new URL(options.edgeUrl).origin;
     this.onStatusChange = options.onStatusChange;
+    this.onTokenExpired = options.onTokenExpired;
     this.insecureNoSession = options.insecureNoSession || false;
 
     // Future options
@@ -62,6 +69,14 @@ export class KycClient {
 
     // Register global message handler
     this.registerMessageHandler();
+
+    // Schedule eviction timer for any token already in storage
+    if (!this.insecureNoSession) {
+      const existing = this.tokenStorage.get();
+      if (existing !== null) {
+        this.scheduleExpiryTimer(existing);
+      }
+    }
   }
 
   /**
@@ -147,7 +162,7 @@ export class KycClient {
    * @returns Promise resolving to current status
    */
   async checkStatus(signal?: AbortSignal): Promise<KycStatus> {
-    const token = this.tokenStorage.get();
+    const token = this.readValidToken();
 
     if (!token) {
       return "unknown";
@@ -186,13 +201,14 @@ export class KycClient {
    * @returns Token string or null
    */
   getToken(): string | null {
-    return this.tokenStorage.get();
+    return this.readValidToken();
   }
 
   /**
    * Logout user (remove token and notify status change)
    */
   logout(): void {
+    this.clearExpiryTimer();
     this.tokenStorage.remove();
 
     if (this.onStatusChange) {
@@ -349,9 +365,18 @@ export class KycClient {
     if (!this.activeSession || this.activeSession.settled) return;
     this.activeSession.settled = true;
 
+    // Determine expiry before any side effects
+    const expiresAt: number | undefined =
+      !this.insecureNoSession && token
+        ? (parseTokenExpiry(token) ?? undefined)
+        : undefined;
+
     // Store token if provided
     if (token) {
       this.tokenStorage.set(token);
+      if (!this.insecureNoSession) {
+        this.scheduleExpiryTimer(token);
+      }
     }
 
     // Notify status change
@@ -366,7 +391,11 @@ export class KycClient {
     this.cleanupSession();
 
     // Resolve with result
-    resolver({ ok: true, status, token });
+    if (expiresAt !== undefined) {
+      resolver({ ok: true, status, token, expiresAt });
+    } else {
+      resolver({ ok: true, status, token });
+    }
   }
 
   /**
@@ -431,10 +460,73 @@ export class KycClient {
   }
 
   /**
+   * Read the stored token, evicting it (and firing onTokenExpired) if expired.
+   * Returns null when insecureNoSession is true and no token exists, or when
+   * the token is absent or expired.
+   */
+  private readValidToken(): string | null {
+    const token = this.tokenStorage.get();
+    if (token === null) return null;
+
+    if (this.insecureNoSession) return token;
+
+    const exp = parseTokenExpiry(token);
+    if (exp !== null && Date.now() / 1000 >= exp) {
+      this.tokenStorage.remove();
+      this.clearExpiryTimer();
+      if (this.onTokenExpired) {
+        this.onTokenExpired();
+      }
+      return null;
+    }
+
+    return token;
+  }
+
+  /**
+   * Schedule a setTimeout that evicts the token exactly when it expires.
+   * Clears any previously scheduled timer first to avoid duplicates.
+   * If the token is already expired, evicts immediately.
+   */
+  private scheduleExpiryTimer(token: string): void {
+    this.clearExpiryTimer();
+
+    const exp = parseTokenExpiry(token);
+    if (exp === null) return;
+
+    const msUntilExpiry = exp * 1000 - Date.now();
+
+    if (msUntilExpiry <= 0) {
+      this.tokenStorage.remove();
+      if (this.onTokenExpired) {
+        this.onTokenExpired();
+      }
+      return;
+    }
+
+    this.expiryTimer = setTimeout(() => {
+      this.expiryTimer = undefined;
+      this.tokenStorage.remove();
+      if (this.onTokenExpired) {
+        this.onTokenExpired();
+      }
+    }, msUntilExpiry);
+  }
+
+  /** Cancel any pending expiry timer. */
+  private clearExpiryTimer(): void {
+    if (this.expiryTimer !== undefined) {
+      clearTimeout(this.expiryTimer);
+      this.expiryTimer = undefined;
+    }
+  }
+
+  /**
    * Clean up resources
    */
   destroy(): void {
     this.cleanupSession();
+    this.clearExpiryTimer();
 
     if (this.messageHandler) {
       window.removeEventListener("message", this.messageHandler);

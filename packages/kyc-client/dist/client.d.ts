@@ -8,6 +8,7 @@ export declare class KycClient {
     private allowedOrigin;
     private storageKey;
     private onStatusChange;
+    private onTokenExpired;
     private insecureNoSession;
     private publishableKey;
     private createSessionUrl;
@@ -15,6 +16,7 @@ export declare class KycClient {
     private tokenStorage;
     private activeSession;
     private messageHandler;
+    private expiryTimer;
     /**
      * Initialize the KYC client
      * @param options Configuration options
@@ -85,6 +87,20 @@ export declare class KycClient {
      * Clean up active session
      */
     private cleanupSession;
+    /**
+     * Read the stored token, evicting it (and firing onTokenExpired) if expired.
+     * Returns null when insecureNoSession is true and no token exists, or when
+     * the token is absent or expired.
+     */
+    private readValidToken;
+    /**
+     * Schedule a setTimeout that evicts the token exactly when it expires.
+     * Clears any previously scheduled timer first to avoid duplicates.
+     * If the token is already expired, evicts immediately.
+     */
+    private scheduleExpiryTimer;
+    /** Cancel any pending expiry timer. */
+    private clearExpiryTimer;
     /**
      * Clean up resources
      */

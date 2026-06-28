@@ -1,4 +1,5 @@
 import { createTokenStorage } from "./core/storage.js";
+import { parseTokenExpiry } from "./core/jwt.js";
 import { checkKycStatus } from "./transport/edgeApi.js";
 import { openKycPopup, closePopup, isPopupOpen, } from "./ui/popup.js";
 import { createKycOverlay } from "./ui/overlay.js";
@@ -12,6 +13,7 @@ export class KycClient {
         this.allowedOrigin = "";
         this.storageKey = "kyc_token";
         this.onStatusChange = undefined;
+        this.onTokenExpired = undefined;
         this.insecureNoSession = false;
         // Future options (not used in insecure mode)
         this.publishableKey = undefined;
@@ -20,18 +22,22 @@ export class KycClient {
         this.tokenStorage = createTokenStorage(this.storageKey);
         this.activeSession = null;
         this.messageHandler = undefined;
+        this.expiryTimer = undefined;
     }
     /**
      * Initialize the KYC client
      * @param options Configuration options
      */
     init(options) {
+        // Clear any expiry timer left from a previous init
+        this.clearExpiryTimer();
         this.edgeUrl = options.edgeUrl;
         this.clientId = options.clientId;
         this.storageKey = options.storageKey || "kyc_token";
         this.allowedOrigin =
             options.allowedOrigin || new URL(options.edgeUrl).origin;
         this.onStatusChange = options.onStatusChange;
+        this.onTokenExpired = options.onTokenExpired;
         this.insecureNoSession = options.insecureNoSession || false;
         // Future options
         this.publishableKey = options.publishableKey;
@@ -41,6 +47,13 @@ export class KycClient {
         this.tokenStorage = createTokenStorage(this.storageKey);
         // Register global message handler
         this.registerMessageHandler();
+        // Schedule eviction timer for any token already in storage
+        if (!this.insecureNoSession) {
+            const existing = this.tokenStorage.get();
+            if (existing !== null) {
+                this.scheduleExpiryTimer(existing);
+            }
+        }
     }
     /**
      * Start KYC verification process
@@ -113,7 +126,7 @@ export class KycClient {
      * @returns Promise resolving to current status
      */
     async checkStatus(signal) {
-        const token = this.tokenStorage.get();
+        const token = this.readValidToken();
         if (!token) {
             return "unknown";
         }
@@ -142,12 +155,13 @@ export class KycClient {
      * @returns Token string or null
      */
     getToken() {
-        return this.tokenStorage.get();
+        return this.readValidToken();
     }
     /**
      * Logout user (remove token and notify status change)
      */
     logout() {
+        this.clearExpiryTimer();
         this.tokenStorage.remove();
         if (this.onStatusChange) {
             this.onStatusChange("unknown");
@@ -282,9 +296,16 @@ export class KycClient {
         if (!this.activeSession || this.activeSession.settled)
             return;
         this.activeSession.settled = true;
+        // Determine expiry before any side effects
+        const expiresAt = !this.insecureNoSession && token
+            ? (parseTokenExpiry(token) ?? undefined)
+            : undefined;
         // Store token if provided
         if (token) {
             this.tokenStorage.set(token);
+            if (!this.insecureNoSession) {
+                this.scheduleExpiryTimer(token);
+            }
         }
         // Notify status change
         if (this.onStatusChange) {
@@ -295,7 +316,12 @@ export class KycClient {
         // Clean up session
         this.cleanupSession();
         // Resolve with result
-        resolver({ ok: true, status, token });
+        if (expiresAt !== undefined) {
+            resolver({ ok: true, status, token, expiresAt });
+        }
+        else {
+            resolver({ ok: true, status, token });
+        }
     }
     /**
      * Handle KYC cancellation
@@ -353,10 +379,66 @@ export class KycClient {
         }
     }
     /**
+     * Read the stored token, evicting it (and firing onTokenExpired) if expired.
+     * Returns null when insecureNoSession is true and no token exists, or when
+     * the token is absent or expired.
+     */
+    readValidToken() {
+        const token = this.tokenStorage.get();
+        if (token === null)
+            return null;
+        if (this.insecureNoSession)
+            return token;
+        const exp = parseTokenExpiry(token);
+        if (exp !== null && Date.now() / 1000 >= exp) {
+            this.tokenStorage.remove();
+            this.clearExpiryTimer();
+            if (this.onTokenExpired) {
+                this.onTokenExpired();
+            }
+            return null;
+        }
+        return token;
+    }
+    /**
+     * Schedule a setTimeout that evicts the token exactly when it expires.
+     * Clears any previously scheduled timer first to avoid duplicates.
+     * If the token is already expired, evicts immediately.
+     */
+    scheduleExpiryTimer(token) {
+        this.clearExpiryTimer();
+        const exp = parseTokenExpiry(token);
+        if (exp === null)
+            return;
+        const msUntilExpiry = exp * 1000 - Date.now();
+        if (msUntilExpiry <= 0) {
+            this.tokenStorage.remove();
+            if (this.onTokenExpired) {
+                this.onTokenExpired();
+            }
+            return;
+        }
+        this.expiryTimer = setTimeout(() => {
+            this.expiryTimer = undefined;
+            this.tokenStorage.remove();
+            if (this.onTokenExpired) {
+                this.onTokenExpired();
+            }
+        }, msUntilExpiry);
+    }
+    /** Cancel any pending expiry timer. */
+    clearExpiryTimer() {
+        if (this.expiryTimer !== undefined) {
+            clearTimeout(this.expiryTimer);
+            this.expiryTimer = undefined;
+        }
+    }
+    /**
      * Clean up resources
      */
     destroy() {
         this.cleanupSession();
+        this.clearExpiryTimer();
         if (this.messageHandler) {
             window.removeEventListener("message", this.messageHandler);
             this.messageHandler = undefined;

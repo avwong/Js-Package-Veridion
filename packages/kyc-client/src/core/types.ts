@@ -32,6 +32,9 @@ export interface InitOptions {
    * This bypasses all authentication and session management
    */
   insecureNoSession?: boolean;
+
+  /** Called whenever a stored token expires naturally or is detected as expired */
+  onTokenExpired?: () => void;
 }
 
 /**
@@ -54,7 +57,7 @@ export interface StartKycOptions {
  * Result of KYC verification attempt
  */
 export type KycResult =
-  | { ok: true; status: KycStatus; token?: string }
+  | { ok: true; status: KycStatus; token?: string; expiresAt?: number }
   | { ok: false; error: string };
 
 /**
