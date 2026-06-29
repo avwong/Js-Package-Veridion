@@ -3,8 +3,43 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useWalletStore } from '@/store/walletStore';
-import { CheckCircle, XCircle, Clock, AlertCircle, KeyRound, Loader2, RefreshCw } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, AlertCircle, KeyRound, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { BackendAPI } from '@/lib/backend-api';
+import { isVerificationStale } from 'stellar-passport';
+
+const STALE_MAX_AGE_SECONDS = 180 * 24 * 60 * 60; // 180 days — configurable
+
+function formatVerificationAge(timestampSeconds: number): string {
+  const ageDays = Math.floor(
+    (Math.floor(Date.now() / 1000) - timestampSeconds) / 86_400,
+  );
+  if (ageDays === 0) return 'Verified today';
+  return `Verified ${ageDays} day${ageDays !== 1 ? 's' : ''} ago`;
+}
+
+const NOW_SECONDS = Math.floor(Date.now() / 1000);
+
+// Representative on-chain verifications — replaced with live contract data when available
+const DEMO_VERIFICATIONS = [
+  {
+    id: 'kyc-over18',
+    label: 'Identity Verification (Over18)',
+    issuer: 'veridion-kyc',
+    timestampSeconds: NOW_SECONDS - 8 * 86_400, // 8 days ago — fresh
+  },
+  {
+    id: 'brightid',
+    label: 'BrightID',
+    issuer: 'brightid-oracle',
+    timestampSeconds: NOW_SECONDS - 200 * 86_400, // 200 days ago — stale
+  },
+  {
+    id: 'worldid',
+    label: 'WorldID',
+    issuer: 'worldcoin-oracle',
+    timestampSeconds: NOW_SECONDS - 47 * 86_400, // 47 days ago — fresh
+  },
+] as const;
 
 interface VerificationStatus {
   wallet: string;
@@ -245,6 +280,49 @@ export default function CheckVerifiedPage() {
                 {/* Details removed for simplified display */}
               </div>
             ) : null}
+
+            {/* Stellar Verifications */}
+            <div className="rounded-lg border border-gray-200 p-4">
+              <h3 className="font-medium text-gray-900 mb-3">
+                On-chain Verifications
+              </h3>
+              <div className="space-y-2">
+                {DEMO_VERIFICATIONS.map((v) => {
+                  const stale = isVerificationStale(
+                    { timestamp: BigInt(v.timestampSeconds) } as unknown as Parameters<typeof isVerificationStale>[0],
+                    STALE_MAX_AGE_SECONDS,
+                  );
+                  return (
+                    <div
+                      key={v.id}
+                      className={`flex items-center justify-between rounded-md px-3 py-2 text-sm border ${
+                        stale
+                          ? 'bg-amber-50 border-amber-200 text-amber-900'
+                          : 'bg-green-50 border-green-200 text-green-900'
+                      }`}
+                    >
+                      <div>
+                        <p className="font-medium">{v.label}</p>
+                        <p className="text-xs opacity-70">
+                          {formatVerificationAge(v.timestampSeconds)}
+                        </p>
+                      </div>
+                      {stale ? (
+                        <span className="flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-2 py-0.5">
+                          <AlertTriangle className="h-3 w-3" />
+                          Stale
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 border border-green-300 rounded-full px-2 py-0.5">
+                          <CheckCircle className="h-3 w-3" />
+                          Fresh
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Action Buttons */}
             <div className="flex gap-3">

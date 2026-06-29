@@ -31,12 +31,25 @@ import {
   EyeOff,
 } from "lucide-react";
 
+function formatTimeRemaining(expiresAtSeconds: number): string {
+  const remaining = expiresAtSeconds - Math.floor(Date.now() / 1000);
+  if (remaining <= 0) return "Expired";
+  const days = Math.floor(remaining / 86_400);
+  if (days >= 1) return `Session valid for ${days} day${days !== 1 ? "s" : ""}`;
+  const hours = Math.floor(remaining / 3_600);
+  if (hours >= 1)
+    return `Session valid for ${hours} hour${hours !== 1 ? "s" : ""}`;
+  const minutes = Math.ceil(remaining / 60);
+  return `Session expires in ${minutes} minute${minutes !== 1 ? "s" : ""}`;
+}
+
 export default function Home() {
   const [kycStatus, setKycStatus] = useState<KycStatus>("unknown");
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [token, setToken] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
+  const [expiresAt, setExpiresAt] = useState<number | undefined>(undefined);
   const [config, setConfig] = useState({
     edgeUrl: "http://localhost:3000",
     clientId: "netjs-demo",
@@ -56,6 +69,47 @@ export default function Home() {
         onStatusChange: (newStatus) => {
           setKycStatus(newStatus);
           addLog(`📊 Status changed to: ${newStatus}`);
+        },
+        onTokenExpired: () => {
+          setKycStatus("unknown");
+          setToken(null);
+          setExpiresAt(undefined);
+          const ts = new Date().toLocaleTimeString();
+          setLogs((prev) => [
+            ...prev.slice(-9),
+            `[${ts}] 🔒 Session expired — re-prompting verification`,
+          ]);
+          setLoading(true);
+          kyc
+            .startKyc({ openMode: "popup" })
+            .then((result) => {
+              const ts2 = new Date().toLocaleTimeString();
+              if (result.ok) {
+                setKycStatus(result.status);
+                if (result.token) setToken(result.token);
+                if (result.expiresAt !== undefined)
+                  setExpiresAt(result.expiresAt);
+                setLogs((prev) => [
+                  ...prev.slice(-9),
+                  `[${ts2}] ✅ Re-verified: ${result.status}`,
+                ]);
+              } else {
+                setLogs((prev) => [
+                  ...prev.slice(-9),
+                  `[${ts2}] ❌ Re-verification failed: ${result.error}`,
+                ]);
+              }
+            })
+            .catch((err: unknown) => {
+              const ts3 = new Date().toLocaleTimeString();
+              setLogs((prev) => [
+                ...prev.slice(-9),
+                `[${ts3}] ❌ Re-verification error: ${
+                  err instanceof Error ? err.message : "Unknown"
+                }`,
+              ]);
+            })
+            .finally(() => setLoading(false));
         },
       });
       addLog("✅ KYC Client initialized successfully!");
@@ -80,6 +134,10 @@ export default function Home() {
         if (result.token) {
           setToken(result.token);
           addLog(`🔑 Token received: ${result.token.substring(0, 20)}...`);
+        }
+        if (result.expiresAt !== undefined) {
+          setExpiresAt(result.expiresAt);
+          addLog(`⏱️ ${formatTimeRemaining(result.expiresAt)}`);
         }
       } else {
         addLog(`❌ KYC failed: ${result.error}`);
@@ -117,6 +175,7 @@ export default function Home() {
   const handleLogout = () => {
     kyc.logout();
     setToken(null);
+    setExpiresAt(undefined);
     addLog("🚪 User logged out");
   };
 
@@ -237,6 +296,19 @@ export default function Home() {
                   {kycStatus.toUpperCase()}
                 </Badge>
               </div>
+
+              {expiresAt !== undefined && kycStatus === "verified" && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Validity:</span>
+                  <Badge
+                    variant="secondary"
+                    className="flex items-center gap-1 bg-blue-100 text-blue-700 border-blue-200"
+                  >
+                    <Clock className="h-3 w-3" />
+                    {formatTimeRemaining(expiresAt)}
+                  </Badge>
+                </div>
+              )}
 
               {token && (
                 <div className="space-y-2">
